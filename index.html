@@ -48,7 +48,7 @@ button:focus-visible{outline:2px solid var(--hot);outline-offset:2px}
 label.ctl{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;color:var(--dim)}
 label.ctl b{color:var(--txt);font-weight:500;min-width:26px;text-align:right}
 input[type=range]{width:96px;accent-color:var(--hot)}
-select{font-family:var(--mono);font-size:12px;background:var(--panel-2);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:7px 10px}
+select{font-family:var(--mono);font-size:12px;background:var(--panel-2);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:7px 10px;max-width:100%}
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px}
 @media(max-width:640px){.stats{grid-template-columns:repeat(2,1fr)}}
 .stat{background:var(--panel-2);border-radius:8px;padding:10px 12px}
@@ -60,6 +60,7 @@ table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px
 th{text-align:left;color:var(--dim);font-weight:500;padding:6px 6px;border-bottom:1px solid var(--line);font-size:10px;letter-spacing:.6px;white-space:nowrap}
 th.sep,td.sep{border-left:1px solid var(--line)}
 td{padding:5px 6px;border-bottom:1px solid #1B2129;white-space:nowrap}
+tr.cur td{background:#1B232E}
 .ok{color:var(--pos)}.bad{color:var(--neg)}
 canvas{width:100%;height:120px;display:block}
 .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:var(--dim);font-family:var(--mono);margin-top:10px}
@@ -73,8 +74,11 @@ canvas{width:100%;height:120px;display:block}
 .scroll::-webkit-scrollbar{width:8px;height:8px}
 .scroll::-webkit-scrollbar-thumb{background:#2A333F;border-radius:4px}
 .outs{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
-.outpill{font-family:var(--mono);font-size:11px;background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:6px 10px;color:var(--dim)}
+.outpill{font-family:var(--mono);font-size:11px;background:var(--panel-2);border:1px solid var(--line);border-left:3px solid var(--line);border-radius:6px;padding:6px 10px;color:var(--dim);display:inline-flex;align-items:center;gap:6px}
 .outpill b{color:var(--hot);font-weight:600}
+.outpill select{font-family:var(--mono);font-size:11px;background:transparent;color:var(--txt);border:none;border-bottom:1px dashed var(--line);border-radius:0;padding:0 2px;cursor:pointer}
+.outpill select:focus{outline:none;border-bottom-color:var(--hot)}
+.outpill select option{background:var(--panel-2);color:var(--txt)}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -82,7 +86,7 @@ canvas{width:100%;height:120px;display:block}
 
 <header>
   <h1>rede neural <span>ao vivo</span></h1>
-  <p class="sub">entradas, camadas ocultas e saídas ajustáveis · retropropagação passo a passo · clique num neurônio para ver o código dele</p>
+  <p class="sub">portas lógicas — NOT, AND, OR, XOR… — uma por saída · tire camadas até virar um perceptron · retropropagação passo a passo · clique num neurônio para ver o código dele</p>
 </header>
 
 <div class="wrap">
@@ -94,18 +98,26 @@ canvas{width:100%;height:120px;display:block}
       <svg id="net" viewBox="0 0 760 480" role="img" aria-label="Diagrama da rede neural"></svg>
 
       <div class="arch">
+        <label class="ctl">experimento
+          <select id="preset"></select>
+        </label>
+      </div>
+
+      <div class="arch">
         <label class="ctl">entradas <input type="range" id="nIn" min="2" max="5" value="2"><b id="nInV">2</b></label>
-        <label class="ctl">camada 1 <input type="range" id="nH1" min="1" max="8" value="3"><b id="nH1V">3</b></label>
-        <label class="ctl">camada 2 <input type="range" id="nH2" min="1" max="8" value="3"><b id="nH2V">3</b></label>
+        <label class="ctl">oculta 1 <input type="range" id="nH1" min="0" max="8" value="3"><b id="nH1V">3</b></label>
+        <label class="ctl">oculta 2 <input type="range" id="nH2" min="0" max="8" value="3"><b id="nH2V">3</b></label>
         <label class="ctl">saídas <input type="range" id="nOut" min="1" max="4" value="1"><b id="nOutV">1</b></label>
         <label class="ctl">tarefa
           <select id="dataset">
-            <option value="multi">multi-tarefa (uma função por saída)</option>
+            <option value="logic">portas lógicas (escolha uma por saída)</option>
             <option value="onehot">classificação one-hot (quantos bits ligados)</option>
             <option value="eco">eco (copiar as primeiras entradas)</option>
           </select>
         </label>
       </div>
+
+      <p class="hint">0 neurônios = camada removida. Sem nenhuma camada oculta a rede vira um <b style="color:var(--txt)">perceptron</b> — experimente o XOR nele e veja por que camadas ocultas existem.</p>
 
       <div class="outs" id="outLegend"></div>
 
@@ -134,16 +146,17 @@ canvas{width:100%;height:120px;display:block}
     </div>
 
     <div class="card" style="margin-top:20px">
-      <h2>curva de erro</h2>
+      <h2>curva de erro por saída</h2>
       <canvas id="chart" width="700" height="120"></canvas>
+      <div class="legend" id="chartLegend"></div>
     </div>
 
     <div class="card" style="margin-top:20px">
-      <h2>amostras de treino <span id="nSamples" style="color:var(--dim);font-weight:400"></span></h2>
+      <h2>tabela-verdade do treino <span id="nSamples" style="color:var(--dim);font-weight:400"></span></h2>
       <div class="scroll">
         <table id="samples"><thead><tr id="sHead"></tr></thead><tbody></tbody></table>
       </div>
-      <p class="hint">Clique numa linha para injetar essa entrada na rede.</p>
+      <p class="hint">Clique numa linha para injetar essa entrada na rede. Y = esperado · Ŷ = o que a rede responde agora.</p>
     </div>
   </div>
 
@@ -170,6 +183,7 @@ canvas{width:100%;height:120px;display:block}
 </div>
 
 <script>
+/*<CORE>*/
 /* =========================================================
    ATIVAÇÕES
    ========================================================= */
@@ -179,13 +193,21 @@ const sig = z => 1 / (1 + Math.exp(-z));
 const dsig = z => { const s = sig(z); return s * (1 - s); };
 
 /* =========================================================
-   REDE — forma dinâmica: [nIn, nH1, nH2, nOut]
+   REDE — forma dinâmica: [entradas, ...ocultas, saídas]
+   Camadas ocultas com 0 neurônios são removidas; sem
+   nenhuma oculta a rede é um perceptron de camada única.
    ========================================================= */
 let SHAPE = [2, 3, 3, 1];
-const NAMES = ['entrada', 'camada 1', 'camada 2', 'saída'];
+let OCULTA_IDS = [];   /* slider de origem de cada camada oculta, para os rótulos */
 let net, epoch, history, selected = { l: 1, i: 0 };
 
 const rand = () => Math.random() * 2 - 1;
+
+function nomeCamada(l) {
+  if (l === 0) return 'entrada';
+  if (l === SHAPE.length - 1) return 'saída';
+  return 'oculta ' + (OCULTA_IDS[l - 1] || l);
+}
 
 function buildNet() {
   net = SHAPE.map((qtd, l) => {
@@ -205,7 +227,7 @@ function buildNet() {
 }
 
 /* cada neurônio de saída é independente: tem seus próprios pesos
-   sobre TODA a camada 2, e seu próprio viés. */
+   sobre a última camada oculta e seu próprio viés. */
 function forward(entrada) {
   net[0].neurons.forEach((n, i) => { n.a = entrada[i]; n.z = entrada[i]; });
   for (let l = 1; l < net.length; l++) {
@@ -220,8 +242,24 @@ function forward(entrada) {
   return net[net.length - 1].neurons.map(n => n.a);
 }
 
+/* forward "puro": calcula a saída SEM tocar no estado da rede.
+   Usado por estatísticas e tabela, para não corromper o que
+   está sendo mostrado no diagrama (bug da versão anterior). */
+function forwardPuro(entrada) {
+  let a = entrada;
+  for (let l = 1; l < net.length; l++) {
+    const ativar = l === net.length - 1 ? sig : tanh;
+    a = net[l].neurons.map(n => {
+      let z = n.b;
+      for (let j = 0; j < a.length; j++) z += a[j] * n.w[j];
+      return ativar(z);
+    });
+  }
+  return a;
+}
+
 /* o erro de CADA saída é calculado separado e todos descem
-   juntos pela mesma camada oculta — é aí que as tarefas se misturam. */
+   juntos pelas mesmas camadas ocultas — é aí que as tarefas se misturam. */
 function backward(alvo, lr) {
   const L = net.length - 1;
   net[L].neurons.forEach((n, i) => { n.delta = (n.a - alvo[i]) * dsig(n.z); });
@@ -248,28 +286,52 @@ function contarParams() {
 }
 
 /* =========================================================
-   DADOS — agora com nOut alvos por amostra
+   CATÁLOGO DE PORTAS LÓGICAS — cada saída escolhe a sua.
+   Portas de 2 entradas usam x1 e x2 e ignoram as demais
+   (a rede precisa aprender a ignorá-las — também é lição).
+   ========================================================= */
+const CATALOGO = [
+  { id: 'copy1', nome: 'copiar x1',                f: x => x[0] },
+  { id: 'not1',  nome: 'NOT x1',                   f: x => 1 - x[0] },
+  { id: 'and',   nome: 'x1 AND x2',                f: x => x[0] & x[1] },
+  { id: 'or',    nome: 'x1 OR x2',                 f: x => x[0] | x[1] },
+  { id: 'nand',  nome: 'NAND (não-E)',             f: x => 1 - (x[0] & x[1]) },
+  { id: 'nor',   nome: 'NOR (não-OU)',             f: x => 1 - (x[0] | x[1]) },
+  { id: 'xor',   nome: 'x1 XOR x2',                f: x => x[0] ^ x[1] },
+  { id: 'xnor',  nome: 'XNOR (igualdade)',         f: x => 1 - (x[0] ^ x[1]) },
+  { id: 'imp',   nome: 'x1 → x2 (implicação)',     f: x => (x[0] === 1 && x[1] === 0) ? 0 : 1 },
+  { id: 'par',   nome: 'paridade (XOR de todos)',  f: x => x.reduce((s, v) => s ^ v, 0) },
+  { id: 'maj',   nome: 'maioria dos bits',         f: x => x.reduce((s, v) => s + v, 0) > x.length / 2 ? 1 : 0 },
+  { id: 'zero',  nome: 'nenhum bit ligado',        f: x => x.every(v => v === 0) ? 1 : 0 },
+  { id: 'one',   nome: 'exatamente 1 bit ligado',  f: x => x.reduce((s, v) => s + v, 0) === 1 ? 1 : 0 }
+];
+const gate = id => CATALOGO.find(g => g.id === id);
+
+const DEFAULT_GATES = ['xor', 'and', 'or', 'nand'];
+let gateSel = DEFAULT_GATES.slice(0, 1);
+
+function ajustarGates(nOut) {
+  while (gateSel.length < nOut) gateSel.push(DEFAULT_GATES[gateSel.length] || 'or');
+}
+
+/* =========================================================
+   DADOS — tabela-verdade completa: 2^nIn amostras,
+   nOut alvos por amostra
    ========================================================= */
 let data = [], outNames = [];
-
-const TAREFAS = [
-  { nome: 'paridade (XOR de todos)', f: x => x.reduce((s, v) => s ^ v, 0) },
-  { nome: 'maioria dos bits', f: x => x.reduce((s, v) => s + v, 0) > x.length / 2 ? 1 : 0 },
-  { nome: 'x1 E x2', f: x => (x[0] === 1 && x[1] === 1) ? 1 : 0 },
-  { nome: 'nenhum bit ligado', f: x => x.every(v => v === 0) ? 1 : 0 }
-];
 
 function gerarDados(tipo, nIn, nOut) {
   const linhas = [];
   outNames = [];
 
-  if (tipo === 'multi') {
-    for (let k = 0; k < nOut; k++) outNames.push(TAREFAS[k].nome);
+  if (tipo === 'logic') {
+    ajustarGates(nOut);
+    for (let k = 0; k < nOut; k++) outNames.push(gate(gateSel[k]).nome);
   } else if (tipo === 'onehot') {
     for (let k = 0; k < nOut; k++)
       outNames.push(k === nOut - 1 ? `${k}+ bits ligados` : `exatamente ${k} bit(s)`);
   } else {
-    for (let k = 0; k < nOut; k++) outNames.push(`copiar x${k + 1}`);
+    for (let k = 0; k < nOut; k++) outNames.push(`copiar x${(k % nIn) + 1}`);
   }
 
   for (let m = 0; m < (1 << nIn); m++) {
@@ -277,8 +339,8 @@ function gerarDados(tipo, nIn, nOut) {
     for (let k = 0; k < nIn; k++) x.push((m >> k) & 1);
 
     let y;
-    if (tipo === 'multi') {
-      y = Array.from({ length: nOut }, (_, k) => TAREFAS[k].f(x));
+    if (tipo === 'logic') {
+      y = Array.from({ length: nOut }, (_, k) => gate(gateSel[k]).f(x));
     } else if (tipo === 'onehot') {
       const ligados = x.reduce((s, v) => s + v, 0);
       const classe = Math.min(ligados, nOut - 1);
@@ -292,13 +354,64 @@ function gerarDados(tipo, nIn, nOut) {
 }
 
 /* =========================================================
+   ESTATÍSTICAS (tudo com forwardPuro — não mexe na rede)
+   ========================================================= */
+function lossAtual() {
+  const nOut = SHAPE[SHAPE.length - 1];
+  let soma = 0, acertosTotais = 0;
+  const acertosSaida = new Array(nOut).fill(0);
+  const lossSaida = new Array(nOut).fill(0);
+  for (const [x, y] of data) {
+    const out = forwardPuro(x);
+    let todas = true;
+    out.forEach((o, k) => {
+      const e = (o - y[k]) ** 2;
+      lossSaida[k] += e;
+      soma += e / out.length;
+      if (Math.round(o) === y[k]) acertosSaida[k]++; else todas = false;
+    });
+    if (todas) acertosTotais++;
+  }
+  return {
+    loss: soma / data.length,
+    acc: acertosTotais / data.length,
+    porSaida: acertosSaida.map(a => a / data.length),
+    porLoss: lossSaida.map(e => e / data.length)
+  };
+}
+/*</CORE>*/
+
+/* =========================================================
+   EXPERIMENTOS PRONTOS — pares clássicos de comparação
+   ========================================================= */
+const PRESETS = [
+  { nome: '— montar na mão —' },
+  { nome: 'NOT x1 · perceptron aprende',              in: 2, h1: 0, h2: 0, out: 1, modo: 'logic', gates: ['not1'] },
+  { nome: 'AND · perceptron aprende',                 in: 2, h1: 0, h2: 0, out: 1, modo: 'logic', gates: ['and'] },
+  { nome: 'OR · perceptron aprende',                  in: 2, h1: 0, h2: 0, out: 1, modo: 'logic', gates: ['or'] },
+  { nome: 'XOR · perceptron FALHA (não linear)',      in: 2, h1: 0, h2: 0, out: 1, modo: 'logic', gates: ['xor'] },
+  { nome: 'XOR · 2 neurônios ocultos aprendem',       in: 2, h1: 2, h2: 0, out: 1, modo: 'logic', gates: ['xor'] },
+  { nome: 'AND + OR + XOR + NAND juntos',             in: 2, h1: 4, h2: 0, out: 4, modo: 'logic', gates: ['and', 'or', 'xor', 'nand'] },
+  { nome: 'paridade de 3 bits',                       in: 3, h1: 4, h2: 0, out: 1, modo: 'logic', gates: ['par'] },
+  { nome: 'paridade de 4 bits (bem difícil)',         in: 4, h1: 6, h2: 4, out: 1, modo: 'logic', gates: ['par'] },
+  { nome: 'contar bits ligados (one-hot)',            in: 3, h1: 5, h2: 0, out: 4, modo: 'onehot' }
+];
+
+/* cor fixa de cada saída — usada nos rótulos, pílulas e curvas */
+const OUTC = ['#FFC93C', '#82AAFF', '#C792EA', '#4FD1A5'];
+
+/* entrada atualmente exibida no diagrama */
+let entradaAtual = null;
+
+/* =========================================================
    DESENHO
    ========================================================= */
 const svg = document.getElementById('net');
 const NS = 'http://www.w3.org/2000/svg';
-const COLS = [95, 315, 535, 700];
 const R = 22;
 let posCache = [];
+
+const colX = l => SHAPE.length === 1 ? 95 : 95 + 605 * l / (SHAPE.length - 1);
 
 function el(tag, attrs) {
   const e = document.createElementNS(NS, tag);
@@ -306,12 +419,13 @@ function el(tag, attrs) {
   return e;
 }
 
+let gapAtual = 88;
 function layout() {
   const maior = Math.max(...SHAPE);
-  const gap = Math.min(88, 370 / Math.max(1, maior - 1));
+  const gap = gapAtual = Math.min(88, 320 / Math.max(1, maior - 1));
   posCache = net.map((layer, l) => {
     const total = (layer.neurons.length - 1) * gap;
-    return layer.neurons.map((_, i) => ({ x: COLS[l], y: 250 - total / 2 + i * gap }));
+    return layer.neurons.map((_, i) => ({ x: colX(l), y: 250 - total / 2 + i * gap }));
   });
 }
 
@@ -320,10 +434,10 @@ function drawStatic() {
   svg.innerHTML = '';
 
   net.forEach((layer, l) => {
-    const t = el('text', { x: COLS[l], y: 34, 'text-anchor': 'middle', class: 'lbl' });
-    t.textContent = NAMES[l].toUpperCase() + ' · ' + layer.neurons.length;
+    const t = el('text', { x: colX(l), y: 34, 'text-anchor': 'middle', class: 'lbl' });
+    t.textContent = nomeCamada(l).toUpperCase() + ' · ' + layer.neurons.length;
     svg.appendChild(t);
-    const t2 = el('text', { x: COLS[l], y: 50, 'text-anchor': 'middle', class: 'lbl', fill: '#4C5663' });
+    const t2 = el('text', { x: colX(l), y: 50, 'text-anchor': 'middle', class: 'lbl', fill: '#4C5663' });
     t2.textContent = layer.act;
     svg.appendChild(t2);
   });
@@ -354,14 +468,18 @@ function drawStatic() {
       g.appendChild(v);
 
       const ehEntrada = l === 0, ehSaida = l === L;
-      const nm = el('text', {
-        class: 'lbl',
-        x: ehEntrada ? p.x - R - 8 : (ehSaida ? p.x + R + 8 : p.x),
-        y: (ehEntrada || ehSaida) ? p.y + 4 : p.y + R + 14,
-        'text-anchor': ehEntrada ? 'end' : (ehSaida ? 'start' : 'middle')
-      });
-      nm.textContent = ehEntrada ? 'x' + (i + 1) : (ehSaida ? 'ŷ' + (i + 1) : 'n' + l + (i + 1));
-      g.appendChild(nm);
+      /* com neurônios muito juntos, o nome embaixo seria coberto pelo círculo vizinho */
+      if (ehEntrada || ehSaida || gapAtual >= 58) {
+        const nm = el('text', {
+          class: 'lbl',
+          x: ehEntrada ? p.x - R - 8 : (ehSaida ? p.x + R + 8 : p.x),
+          y: (ehEntrada || ehSaida) ? p.y + 4 : p.y + R + 14,
+          'text-anchor': ehEntrada ? 'end' : (ehSaida ? 'start' : 'middle')
+        });
+        nm.textContent = ehEntrada ? 'x' + (i + 1) : (ehSaida ? 'ŷ' + (i + 1) : 'n' + l + (i + 1));
+        if (ehSaida) nm.setAttribute('fill', OUTC[i]);
+        g.appendChild(nm);
+      }
 
       g.addEventListener('click', () => { selected = { l, i }; render(); });
       svg.appendChild(g);
@@ -408,7 +526,7 @@ function render() {
 function neuronId(l, i) {
   if (l === 0) return 'entrada_x' + (i + 1);
   if (l === net.length - 1) return 'saida_' + (i + 1);
-  return 'camada' + l + '_n' + (i + 1);
+  return 'oculta' + (OCULTA_IDS[l - 1] || l) + '_n' + (i + 1);
 }
 
 function renderNeuron() {
@@ -416,7 +534,7 @@ function renderNeuron() {
   const n = net[l].neurons[i];
   const L = net.length - 1;
   const tarefa = l === L && outNames[i] ? ` — aprende "${outNames[i]}"` : '';
-  document.getElementById('neuTitle').textContent = `neurônio · ${NAMES[l]} · ${neuronId(l, i)}`;
+  document.getElementById('neuTitle').textContent = `neurônio · ${nomeCamada(l)} · ${neuronId(l, i)}` + tarefa;
 
   if (l === 0) {
     document.getElementById('neuMath').innerHTML =
@@ -431,7 +549,7 @@ function renderNeuron() {
   const termos = n.w.map((w, j) => `${w >= 0 ? '+' : '−'} ${Math.abs(w).toFixed(3)}·${ant[j].a.toFixed(3)}`).join(' ');
 
   document.getElementById('neuMath').innerHTML =
-    (tarefa ? `<b>${outNames[i]}</b><br>` : '') +
+    (l === L && outNames[i] ? `<b>${outNames[i]}</b><br>` : '') +
     `z = ${n.b.toFixed(3)} ${termos}<br>` +
     `z = <b>${n.z.toFixed(4)}</b> · a = ${fn}(z) = <b>${n.a.toFixed(4)}</b><br>` +
     `δ (erro local) = <b>${n.delta.toFixed(5)}</b> · ${n.w.length} pesos + 1 viés`;
@@ -442,7 +560,7 @@ function renderNeuron() {
     : `<span class="n">1</span> / (<span class="n">1</span> + <span class="f">Math</span>.<span class="f">exp</span>(-z))`;
 
   document.getElementById('neuCode').innerHTML =
-`<span class="c">// ${neuronId(l, i)} — recebe ${ant.length} entrada(s)${l === L ? '\n// alvo: ' + outNames[i] : ''}</span>
+`<span class="c">// ${neuronId(l, i)} — recebe ${ant.length} entrada(s)${l === L && outNames[i] ? '\n// alvo: ' + outNames[i] : ''}</span>
 <span class="k">function</span> <span class="f">${neuronId(l, i)}</span>(entradas) {
   <span class="k">const</span> w = [<span class="n">${wStr}</span>];
   <span class="k">const</span> b = <span class="n">${n.b.toFixed(4)}</span>;
@@ -459,26 +577,56 @@ function renderNeuron() {
 }
 
 /* =========================================================
-   ESTATÍSTICAS
+   PÍLULAS DAS SAÍDAS (reconstruídas só quando a rede muda,
+   para não destruir o <select> aberto durante o treino)
    ========================================================= */
-function lossAtual() {
-  let soma = 0, acertosTotais = 0, acertosSaida = new Array(SHAPE[3]).fill(0);
-  for (const [x, y] of data) {
-    const out = forward(x);
-    soma += out.reduce((s, o, k) => s + (o - y[k]) ** 2, 0) / out.length;
-    let todas = true;
-    out.forEach((o, k) => {
-      if (Math.round(o) === y[k]) acertosSaida[k]++; else todas = false;
-    });
-    if (todas) acertosTotais++;
+function buildOutPills() {
+  const modo = $('dataset').value;
+  const nOut = SHAPE[SHAPE.length - 1];
+  const cont = $('outLegend');
+  cont.innerHTML = '';
+
+  for (let k = 0; k < nOut; k++) {
+    const pill = document.createElement('span');
+    pill.className = 'outpill';
+    pill.style.borderLeftColor = OUTC[k];
+    pill.append(`ŷ${k + 1} ·`);
+
+    if (modo === 'logic') {
+      const sel = document.createElement('select');
+      sel.setAttribute('aria-label', `porta lógica da saída ${k + 1}`);
+      CATALOGO.forEach(g => {
+        const o = document.createElement('option');
+        o.value = g.id; o.textContent = g.nome;
+        sel.appendChild(o);
+      });
+      sel.value = gateSel[k];
+      sel.addEventListener('change', () => {
+        gateSel[k] = sel.value;
+        $('preset').value = '0';
+        reconstruir(`saída ${k + 1} agora aprende "${gate(sel.value).nome}"`);
+      });
+      pill.appendChild(sel);
+    } else {
+      pill.append(` ${outNames[k]} `);
+    }
+
+    const b = document.createElement('b');
+    b.id = 'acc' + k;
+    b.textContent = '—';
+    pill.appendChild(b);
+    cont.appendChild(pill);
   }
-  return {
-    loss: soma / data.length,
-    acc: acertosTotais / data.length,
-    porSaida: acertosSaida.map(a => a / data.length)
-  };
+
+  $('chartLegend').innerHTML =
+    outNames.map((nm, k) =>
+      `<span class="chip"><span class="swatch" style="background:${OUTC[k]}"></span>ŷ${k + 1} ${nm}</span>`).join('') +
+    (nOut > 1 ? `<span class="chip"><span class="swatch" style="background:#7C8794"></span>erro médio (média das saídas)</span>` : '');
 }
 
+/* =========================================================
+   ESTATÍSTICAS NA TELA
+   ========================================================= */
 function renderStats() {
   const { loss, acc, porSaida } = lossAtual();
   const p = contarParams();
@@ -487,20 +635,29 @@ function renderStats() {
   document.getElementById('stAcc').textContent = Math.round(acc * 100) + '%';
   document.getElementById('stParams').textContent = p.total;
 
-  document.getElementById('outLegend').innerHTML = outNames.map((nome, k) =>
-    `<span class="outpill">ŷ${k + 1} · ${nome} · <b>${Math.round(porSaida[k] * 100)}%</b></span>`).join('');
+  porSaida.forEach((a, k) => {
+    const b = document.getElementById('acc' + k);
+    if (b) b.textContent = Math.round(a * 100) + '%';
+  });
+
+  const linhas = [];
+  for (let l = 1; l < SHAPE.length; l++)
+    linhas.push(`<span class="c">// ${nomeCamada(l)}</span>  ${SHAPE[l]} × ${SHAPE[l - 1]} pesos + ${SHAPE[l]} viés = <span class="n">${SHAPE[l] * SHAPE[l - 1] + SHAPE[l]}</span>`);
 
   document.getElementById('paramCode').innerHTML =
 `<span class="c">// forma: [${SHAPE.join(', ')}]</span>
-${[1, 2, 3].map(l =>
-`<span class="c">// ${NAMES[l]}</span>  ${SHAPE[l]} × ${SHAPE[l - 1]} pesos + ${SHAPE[l]} viés = <span class="n">${SHAPE[l] * SHAPE[l - 1] + SHAPE[l]}</span>`).join('\n')}
+${linhas.join('\n')}
 
 <span class="c">// total</span>  <span class="n">${p.w}</span> pesos + <span class="n">${p.b}</span> vieses = <span class="n">${p.total}</span>
 <span class="c">// amostras: 2^${SHAPE[0]} = ${1 << SHAPE[0]}</span>`;
 }
 
-function renderSamples() {
-  const nIn = SHAPE[0], nOut = SHAPE[3];
+/* linhas construídas UMA vez por reconstrução (nós estáveis: cliques
+   funcionam mesmo com o treino redesenhando a cada frame) */
+let sampleCells = [];
+
+function buildSamplesTable() {
+  const nIn = SHAPE[0], nOut = SHAPE[SHAPE.length - 1];
   document.getElementById('sHead').innerHTML =
     Array.from({ length: nIn }, (_, k) => `<th>X${k + 1}</th>`).join('') +
     Array.from({ length: nOut }, (_, k) => `<th class="${k === 0 ? 'sep' : ''}">Y${k + 1}</th>`).join('') +
@@ -510,24 +667,50 @@ function renderSamples() {
 
   const tb = document.querySelector('#samples tbody');
   tb.innerHTML = '';
+  sampleCells = [];
   for (const [x, y] of data) {
-    const out = forward(x);
-    const erro = out.reduce((s, o, k) => s + Math.abs(o - y[k]), 0) / out.length;
     const tr = document.createElement('tr');
     tr.style.cursor = 'pointer';
     tr.innerHTML =
       x.map(v => `<td>${v}</td>`).join('') +
       y.map((v, k) => `<td class="${k === 0 ? 'sep' : ''}">${v}</td>`).join('') +
-      out.map((o, k) => {
-        const bom = Math.abs(o - y[k]) < 0.25;
-        return `<td class="${bom ? 'ok' : 'bad'} ${k === 0 ? 'sep' : ''}">${o.toFixed(3)}</td>`;
-      }).join('') +
-      `<td class="sep">${erro.toFixed(3)}</td>`;
-    tr.addEventListener('click', () => { forward(x); render(); });
+      y.map((_, k) => `<td class="${k === 0 ? 'sep' : ''}">—</td>`).join('') +
+      '<td class="sep">—</td>';
+    tr.addEventListener('click', () => {
+      geracao++;               /* cancela um passo lento em andamento */
+      entradaAtual = x;
+      forward(x);
+      render();
+    });
     tb.appendChild(tr);
+    const tds = tr.querySelectorAll('td');
+    sampleCells.push({
+      tr, x, y,
+      outs: [...tds].slice(nIn + nOut, nIn + nOut + nOut),
+      erro: tds[tds.length - 1]
+    });
   }
 }
 
+function renderSamples() {
+  for (const cel of sampleCells) {
+    const out = forwardPuro(cel.x);
+    let erro = 0;
+    out.forEach((o, k) => {
+      const dif = Math.abs(o - cel.y[k]);
+      erro += dif;
+      cel.outs[k].textContent = o.toFixed(3);
+      cel.outs[k].classList.toggle('ok', dif < 0.25);
+      cel.outs[k].classList.toggle('bad', dif >= 0.25);
+    });
+    cel.erro.textContent = (erro / out.length).toFixed(3);
+    cel.tr.classList.toggle('cur', !!entradaAtual && cel.x.join() === entradaAtual.join());
+  }
+}
+
+/* =========================================================
+   GRÁFICO — uma curva por saída, na cor da saída
+   ========================================================= */
 const ctx = document.getElementById('chart').getContext('2d');
 function drawChart() {
   const W = ctx.canvas.width, H = ctx.canvas.height;
@@ -538,32 +721,63 @@ function drawChart() {
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
   }
   if (history.length < 2) return;
-  const max = Math.max(...history, 0.001);
-  ctx.strokeStyle = '#FFC93C'; ctx.lineWidth = 2; ctx.beginPath();
-  history.forEach((v, k) => {
-    const x = k / (history.length - 1) * W;
-    const y = H - 5 - (v / max) * (H - 12);
-    k ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
-  });
-  ctx.stroke();
+
+  const nOut = SHAPE[SHAPE.length - 1];
+  let max = 0.001;
+  for (const h of history) max = Math.max(max, h.t, ...h.por);
+
+  const linha = (get, cor, tracejada) => {
+    ctx.strokeStyle = cor;
+    ctx.lineWidth = tracejada ? 1.5 : 2;
+    ctx.setLineDash(tracejada ? [4, 4] : []);
+    ctx.beginPath();
+    history.forEach((h, k) => {
+      const x = k / (history.length - 1) * W;
+      const y = H - 5 - (get(h) / max) * (H - 12);
+      k ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
+  };
+
+  if (nOut > 1) linha(h => h.t, '#7C8794', true);
+  for (let k = 0; k < nOut; k++) linha(h => h.por[k] ?? 0, OUTC[k], false);
+
+  ctx.fillStyle = '#7C8794';
+  ctx.font = '10px "IBM Plex Mono", monospace';
+  ctx.fillText('máx ' + max.toFixed(3), 6, 14);
+  ctx.textAlign = 'right';
+  ctx.fillText(`janela: ~${history.length * 5} épocas`, W - 6, 14);
+  ctx.textAlign = 'left';
 }
 
 /* =========================================================
    CONTROLES
    ========================================================= */
 let rodando = false, timer = null;
+/* geração da rede: qualquer reconstrução/interrupção incrementa; o passo
+   lento assíncrono confere após cada pausa e desiste se o mundo mudou —
+   sem isso, mudar a arquitetura no meio da animação corrompia os pesos */
+let geracao = 0;
+/* cursor de amostra do passo lento: época só conta ao completar a volta */
+let amostraIdx = 0;
 const $ = id => document.getElementById(id);
 const getLr = () => +$('lr').value / 100;
 
 function epocaCompleta() {
   for (const [x, y] of data) { forward(x); backward(y, getLr()); }
   epoch++;
-  if (epoch % 5 === 0) { history.push(lossAtual().loss); if (history.length > 300) history.shift(); }
+  if (epoch % 5 === 0) {
+    const { loss, porLoss } = lossAtual();
+    history.push({ t: loss, por: porLoss });
+    if (history.length > 300) history.shift();
+  }
 }
 
 function tick() {
   const porQuadro = Math.max(1, Math.round(+$('speed').value / 4));
   for (let k = 0; k < porQuadro; k++) epocaCompleta();
+  forward(entradaAtual);   /* repõe no diagrama a entrada escolhida */
   render();
   if (rodando) timer = requestAnimationFrame(tick);
 }
@@ -575,6 +789,7 @@ function parar() {
 }
 
 $('btnPlay').addEventListener('click', () => {
+  geracao++;   /* encerra um passo lento em andamento */
   rodando = !rodando;
   $('btnPlay').textContent = rodando ? '❚❚ pausar' : '▶ treinar';
   $('phase').textContent = rodando ? 'treinando…' : 'pausado';
@@ -583,11 +798,14 @@ $('btnPlay').addEventListener('click', () => {
 
 async function passoLento() {
   parar();
-  const [x, y] = data[epoch % data.length];
+  const g = ++geracao;   /* também cancela um passo lento anterior */
+  const [x, y] = data[amostraIdx % data.length];
+  const rotulo = `amostra ${amostraIdx % data.length + 1}/${data.length}`;
+  entradaAtual = x;
   const espera = ms => new Promise(r => setTimeout(r, ms));
 
   for (let l = 0; l < net.length; l++) {
-    $('phase').textContent = `→ para frente: ${NAMES[l]}`;
+    $('phase').textContent = `→ para frente: ${nomeCamada(l)} (${rotulo})`;
     if (l === 0) net[0].neurons.forEach((n, i) => { n.a = x[i]; n.z = x[i]; });
     else {
       const ant = net[l - 1].neurons, ativar = l === net.length - 1 ? sig : tanh;
@@ -598,48 +816,85 @@ async function passoLento() {
       }
     }
     render(); await espera(650);
+    if (g !== geracao) return;
   }
 
   const L = net.length - 1;
   const prev = net[L].neurons.map(n => n.a.toFixed(2)).join(', ');
   $('phase').textContent = `← erro: previsto [${prev}] · esperado [${y.join(', ')}]`;
   await espera(1000);
+  if (g !== geracao) return;
   $('phase').textContent = '← retropropagando: cada saída manda seu erro para trás';
-  backward(y, getLr()); epoch++;
+  backward(y, getLr());
+  amostraIdx++;
+  const fechouEpoca = amostraIdx % data.length === 0;
+  if (fechouEpoca) epoch++;   /* época = UMA volta completa pelos dados */
+  forward(x);   /* mostra a nova resposta da rede para a MESMA entrada */
   render(); await espera(600);
-  $('phase').textContent = 'pronto — repita para ver os pesos mudando';
+  if (g !== geracao) return;
+  $('phase').textContent = fechouEpoca
+    ? 'época completa: todos os exemplos passaram uma vez — repita e compare'
+    : `pronto — ${amostraIdx % data.length}/${data.length} amostras desta época; repita para a próxima`;
 }
 $('btnStep').addEventListener('click', passoLento);
 
 function reconstruir(msg) {
   parar();
+  geracao++;      /* invalida qualquer passo lento pendente */
+  amostraIdx = 0;
   const nIn = +$('nIn').value, nOut = +$('nOut').value;
-  SHAPE = [nIn, +$('nH1').value, +$('nH2').value, nOut];
+  /* guarda o slider de origem de cada camada: se oculta 1 = 0,
+     a camada do slider 2 continua se chamando "oculta 2" na tela */
+  const ocultas = [[1, +$('nH1').value], [2, +$('nH2').value]].filter(([, v]) => v > 0);
+  SHAPE = [nIn, ...ocultas.map(([, v]) => v), nOut];
+  OCULTA_IDS = ocultas.map(([id]) => id);
+  ajustarGates(nOut);
   data = gerarDados($('dataset').value, nIn, nOut);
   buildNet();
-  forward(data[0][0]);
+  entradaAtual = data[0][0];
+  forward(entradaAtual);
   drawStatic();
+  buildOutPills();
+  buildSamplesTable();
   render();
   $('phase').textContent = msg;
 }
 
 $('btnReset').addEventListener('click', () => reconstruir('pesos sorteados de novo'));
-$('dataset').addEventListener('change', () => reconstruir('tarefa trocada'));
+$('dataset').addEventListener('change', () => { $('preset').value = '0'; reconstruir('tarefa trocada'); });
 
-[['nIn', 'nInV'], ['nH1', 'nH1V'], ['nH2', 'nH2V'], ['nOut', 'nOutV']].forEach(([id, out]) => {
+const sliderLabels = [['nIn', 'nInV'], ['nH1', 'nH1V'], ['nH2', 'nH2V'], ['nOut', 'nOutV']];
+sliderLabels.forEach(([id, out]) => {
   $(id).addEventListener('input', e => {
     $(out).textContent = e.target.value;
+    $('preset').value = '0';
     reconstruir('arquitetura alterada — rede reiniciada');
   });
 });
 $('lr').addEventListener('input', e => $('lrVal').textContent = (e.target.value / 100).toFixed(2));
 $('speed').addEventListener('input', e => $('spVal').textContent = e.target.value);
 
+/* preencher o seletor de experimentos */
+PRESETS.forEach((p, k) => {
+  const o = document.createElement('option');
+  o.value = k; o.textContent = p.nome;
+  $('preset').appendChild(o);
+});
+$('preset').addEventListener('change', e => {
+  const p = PRESETS[+e.target.value];
+  if (!p || !p.in) return;
+  $('nIn').value = p.in; $('nH1').value = p.h1; $('nH2').value = p.h2; $('nOut').value = p.out;
+  sliderLabels.forEach(([id, out]) => $(out).textContent = $(id).value);
+  $('dataset').value = p.modo;
+  if (p.gates) gateSel = p.gates.slice();
+  reconstruir('experimento: ' + p.nome);
+});
+
 $('loopCode').innerHTML =
 `<span class="k">for</span> (<span class="k">let</span> epoca = <span class="n">0</span>; epoca &lt; <span class="n">10000</span>; epoca++) {
   <span class="k">for</span> (<span class="k">const</span> [x, y] <span class="k">of</span> dados) {
 
-    <span class="c">// x = vetor de entradas</span>
+    <span class="c">// x = uma linha da tabela-verdade</span>
     <span class="c">// y = vetor de alvos, um por saída</span>
     <span class="f">forward</span>(x);
     <span class="f">backward</span>(y, lr);
@@ -649,7 +904,7 @@ $('loopCode').innerHTML =
 <span class="c">// com várias saídas, todas compartilham</span>
 <span class="c">// as mesmas camadas ocultas.</span>`;
 
-reconstruir('pesos aleatórios — clique em treinar');
+reconstruir('pesos aleatórios — escolha um experimento ou clique em treinar');
 </script>
 </body>
 </html>
